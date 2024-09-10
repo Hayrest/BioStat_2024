@@ -15,26 +15,6 @@ library (dplyr)
 
 ## R Markdown
 
-#tibble(), tidyr and dplyr
-
-```{r}
-
-
-data %>% add_column(column_name = 1:10, .before = NULL, .after = NULL)
-
-data %>% add_row(var_1 = 1, var_2 = "value", .before = NULL, .after = NULL)
-
-data_1 %>% bind_cols(data_2) %>% bind_cols(data_3)
-
-data_1 %>% bind_rows(data_2) %>% bind_rows(data_3)
-
-data_1 <- tibble(var_1 = 1:8) %>% mutate(id = row_number())
-
-data_2 <- tibble(var_2 = rnorm(10)) %>% mutate(`Subject ID` = row_number())
-
-data %>% group_by(column_name)
-```
-
 #First lession with dataset
 
 ```{r}
