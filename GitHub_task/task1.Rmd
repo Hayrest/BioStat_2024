@@ -51,8 +51,11 @@ data %>%
 
 data %>% select (`Группа`, where (is.numeric))
 
-data %>% 
-  select(`Группа`, where(is.numeric) & function(x) mean(x, na.rm = TRUE) > 10)
+data %>%
+  select(`Группа`, where(is.numeric)) %>%
+  select_if(~ mean(.x, na.rm = TRUE) > 10)
+
+
 
 
 ```
