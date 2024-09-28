@@ -1,0 +1,304 @@
+---
+title: "Visualisation 1"
+author: "Гладышев Никита Сергеевич"
+date: "2024-09-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library (tidyverse)
+```
+
+## Столбчатые диаграммы
+
+1. Постройте барплот (столбчатую диаграмму), отражающую распределение
+числа студентов по курсу обучения. Примените любую из встроенных тем
+ggplot. Раскрасьте столбики любым понравившимся вам цветом (можно
+использовать как словесные обозначения, так и гекскоды). Добавьте цвет
+контура столбиков. (1 б).
+
+
+```{r}
+data <- read.csv ("hogwarts.csv")
+data <- data %>%  
+  mutate (across (where (is.character), as.factor), across (2:4, as.factor))
+
+
+ggplot (data, aes (course)) +
+  geom_bar (color = "black", fill = "blue" ) +
+  theme_bw () + 
+  labs (x = "Курс", y = "Количество студентов")
+```
+
+2. Создайте новый барплот, отражающий распределение числа студентов
+по факультету. Добавьте на график вторую факторную переменную –
+происхождение (bloodStatus). Модифицируйте при помощи аргумента
+position графика так, чтобы каждый столбец показывал распределение
+факультета по чистоте крови в долях. Примените произвольную тему.
+Запишите текстом в rmd-документе, какой вывод можно сделать из
+графика? (1 б).
+
+```{r}
+
+ggplot (data, aes (house, fill = blood_status)) +
+  geom_bar (position = "fill") +
+  theme_bw () + 
+  labs (x = "Факультет", y = "Доля студентов", fill = "Происхождение") +
+  scale_fill_discrete(labels = c("Half-blood" = "Полукровка", 
+                                 "Muggle-borned" = "Маглорожденный", 
+                                 "Pure-blood" = "Чистокровный"))
+```
+
+*Ответ*: На факультете Слизерин имеется значительный перевес в доле "чистокровных" волшебников, при полном отстутствии маглорожденных, что может свидетельствовать о дискриминации (не исключено, что со стороны распределяющей шляпы ;))
+
+3. Модифицируйте датасет таким образом, чтобы в нем остались только
+чистокровные (pure-blood) и маглорожденные студенты (muggle-born).
+Создайте на основе этих данных график из пункта 2. Добавьте
+горизонтальную пунктирную линию произвольного цвета на уровне 50%.
+Дайте осям название на русском языке (1б). Дополнительно:
+переименуйте на русский язык категории легенды pure-blood и
+muggle-born (0.5 б).
+
+```{r}
+
+data %>% filter (blood_status %in% c ("Pure-blood", "Muggle-borned")) %>%
+  ggplot (aes (house, fill = blood_status)) +
+  geom_bar (position = "fill") +
+  geom_hline(aes (yintercept = 0.5), linetype = "dashed", color = "purple", size = 1) +
+  theme_bw () + 
+  labs (x = "Факультет", y = "Доля студентов", fill = "Происхождение") +
+  scale_fill_brewer(palette = "Set2", labels = c("Pure-blood" = "Чистокровный", 
+                                                 "Muggle-borned" = "Маглорожденный")) + 
+  scale_x_discrete(labels = c("Gryffindor" = "Гриффиндор", 
+                              "Slytherin" = "Слизерин", 
+                              "Ravenclaw" = "Когтевран", 
+                              "Hufflepuff" = "Пуффендуй"))
+
+```
+
+## Боксплоты
+
+1. Отобразите распределение баллов, заработанных студентами на 3-й
+неделе обучения, по факультетам. Отсортируйте факультеты в порядке
+убывания медианного балла за 3-ю неделю (мы не останавливались на
+этом в лекции, но упомянутая в ней функция по умолчанию сортирует
+именно по медиане, так что в этом случае дополнительных аргументов
+передавать не следует). (1 б.)
+
+```{r}
+
+ggplot (data, aes (x = reorder(house, -week.3), y = week.3)) +
+  geom_boxplot(fill = "skyblue") +
+  theme_bw() +
+  labs(x = "Факультет", y = "Баллы за 3 неделю") +
+  scale_x_discrete(labels = c("Gryffindor" = "Гриффиндор", 
+                              "Slytherin" = "Слизерин", 
+                              "Ravenclaw" = "Когтевран", 
+                              "Hufflepuff" = "Пуффендуй"))
+
+```
+2. Добавьте отображение разными цветами для происхождения студентов
+(bloodStatus). Добавьте на боксплот вырезку (notch). Настройте для
+данного чанка размер изображения 14:14 дюймов. Приведите названия
+осей к корректному виду. (1 б.)
+
+```{r, fig.height= 14, fig.width= 14}
+
+
+ggplot (data, aes (x = reorder(house, -week.3), y = week.3, fill = blood_status)) +
+  geom_boxplot(notch = TRUE) +
+  theme_bw() +
+  labs(fill = "Происхождение", x = "Факультет", y = "Баллы за 3 неделю") +
+  scale_x_discrete(labels = c("Gryffindor" = "Гриффиндор", 
+                              "Slytherin" = "Слизерин", 
+                              "Ravenclaw" = "Когтевран", 
+                              "Hufflepuff" = "Пуффендуй")) +
+  scale_fill_discrete(labels = c("Half-blood" = "Полукровка", 
+                                 "Muggle-borned" = "Маглорожденный", 
+                                 "Pure-blood" = "Чистокровный")) +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20))
+
+```
+3. Добавьте на график джиттер-плот. Удалите отображение выбросов у
+боксплота. Видоизмените по своему вкусу толщину линий и ширину
+боксплота. (1 б.) Дополнительно: Добавьте название графика и подпись
+(0.5 б.)
+
+
+```{r, fig.height= 14, fig.width= 14}
+ggplot (data, aes (x = reorder(house, -week.3), y = week.3, fill = blood_status)) +
+  geom_boxplot(notch = TRUE, outlier.shape = NA, size = 1.5, width = 0.6) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  theme_bw() +
+  labs(title = "Название графика))", subtitle = "Подпись?)", fill = "Происхождение", x = "Факультет", y = "Баллы за 3 неделю") +
+  scale_x_discrete(labels = c("Gryffindor" = "Гриффиндор", 
+                              "Slytherin" = "Слизерин", 
+                              "Ravenclaw" = "Когтевран", 
+                              "Hufflepuff" = "Пуффендуй")) +
+  scale_fill_discrete(labels = c("Half-blood" = "Полукровка", 
+                                 "Muggle-borned" = "Маглорожденный", 
+                                 "Pure-blood" = "Чистокровный")) +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    plot.title = element_text(size = 24, hjust = 0.5),
+     plot.subtitle = element_text(size = 18, hjust = 0.5))
+
+```
+
+## Разное
+
+1. Постройте “леденцовый график” (lollipop-plot) для количества набранных
+студентами 5-го курса баллов за весь учебный год (по оси ординат – id
+студента, по оси абсцисс – итоговый балл). Отсортируйте студентов в
+порядке убывания итогового балла. Раскрасьте точки на “леденцах” в
+зависимости от сердцевины волшебной палочки. Палочки с сердечной
+жилой дракона должны быть красного цвета, с пером феникса – желтого, с
+волосом единорога – серого. (1 б.)
+
+```{r,  fig.height= 7, fig.width= 5}
+data %>% 
+  filter(course == 5) %>% 
+  arrange(desc(result)) %>% 
+  ggplot(aes(x = result, y = reorder(id, result), color = wand)) + 
+  geom_segment(aes(x = 0, xend = result, y = reorder(id, result), yend = reorder(id, result)), size = 0.8) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("Dragon heartstring" = "red", 
+                                "Phoenix feather" = "yellow", 
+                                "Unicorn hair" = "gray")) +
+  theme_bw() +
+  labs(x = "Итоговый балл",
+       y = "ID студента",
+       color = "Сердцевина палочки")
+```
+
+2. Постройте гистограмму распредления баллов за экзамен по астрономии.
+Выделите цветом факультет Слизерин. Примените 18-й кегль к тексту на
+осях x, y и легенды. Название оси y и легенды запишите 20-м кеглем, оси x
+– 22-м. Измените название оси y на “Number of students”. (1 б.)
+
+```{r}
+ggplot (data, aes (Astronomy_exam, fill = (house == "Slytherin"))) +
+  geom_histogram(color = "black") +
+  scale_fill_manual(values = c("TRUE" = "green", "FALSE" = "gray"), labels = c("FALSE" = "Другие", "TRUE" = "Слизерин")) +
+  theme_bw() +
+  labs(y = "Number of students", fill = "Факультет") +
+  theme(
+    axis.text.x = element_text(size = 18),
+    axis.text.y = element_text(size = 18),
+    axis.title.x = element_text(size = 22),
+    axis.title.y = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18)
+  )
+
+
+```
+
+3. На лекции мы использовали комбинацию theme_bw(), и созданной нами
+theme_custom, чтобы одновременно сделать фон белым и увеличить
+шрифт. Модифицируйте theme_custom таким образом, чтобы она и
+выполняла свои прежние функции, и делала фон белым без помощи
+theme_bw(). Примените новую кастомную тему к графику, полученному в
+последнем пункте блока по боксплотам (1.5 б).
+
+```{r, fig.height= 14, fig.width= 14}
+# Задаем тему custom
+theme_custom <- theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 25),
+    # axis.text.x = element_text(angle = 15),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20)
+  )
+
+# Перезадаем тему custom
+
+theme_custom <- theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 25),
+    # axis.text.x = element_text(angle = 15),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    panel.background = element_rect(fill = "white", color = NA), 
+    plot.background = element_rect(fill = "white", color = NA), 
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank() 
+)
+
+ggplot (data, aes (x = reorder(house, -week.3), y = week.3, fill = blood_status)) +
+  geom_boxplot(notch = TRUE, outlier.shape = NA, size = 1.5, width = 0.6) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  labs(title = "Название графика))", subtitle = "Подпись?)", fill = "Происхождение", x = "Факультет", y = "Баллы за 3 неделю") +
+  scale_x_discrete(labels = c("Gryffindor" = "Гриффиндор", 
+                              "Slytherin" = "Слизерин", 
+                              "Ravenclaw" = "Когтевран", 
+                              "Hufflepuff" = "Пуффендуй")) +
+  scale_fill_discrete(labels = c("Half-blood" = "Полукровка", 
+                                 "Muggle-borned" = "Маглорожденный", 
+                                 "Pure-blood" = "Чистокровный")) +
+  theme_custom
+  
+#  theme(
+#    axis.text.x = element_text(size = 20),
+#    axis.text.y = element_text(size = 20),
+#    axis.title.x = element_text(size = 20),
+#    axis.title.y = element_text(size = 20),
+#   legend.title = element_text(size = 20),
+#    legend.text = element_text(size = 20),
+#    plot.title = element_text(size = 24, hjust = 0.5),
+#     plot.subtitle = element_text(size = 18, hjust = 0.5))
+
+```
+
+## Фасетирование
+
+1. Напишите, какой, по вашему мнению, способ фасетирования (по строкам
+или по столбцам) лучше использовать для визуализации гистограммы.
+Почему? А какой для визуализации violin-plot? Почему? Можно ли
+вывести общее правило? (1.5 б)
+
+*Ответ*: Для гистограммы лучше использовать фасетирование по строкам, так как это облегчает сравнение высоты столбиков и выравнивает оси X, что делает распределение более читабельным и позволяет сравнить меры вариатифвности и меры центральной тенденции (приблизительно). Для violin-plot предпочтительнее фасетирование по столбцам, так как это позволяет выровнять оси Y и облегчает сравнение распределений (тех же характеристик). Общее правило: фасетирование по строкам подходит для сравнения высоты элементов, а фасетирование по столбцам — для сравнения формы и вертикальных характеристик.
+
+2. Постройте гистограмму для результата любого выбранного вами
+экзамена, кроме зельеварения. Настройте оптимальное на ваш взгляд
+число столбцов гистограммы. Выполните фасетирование по курсу.
+Постарайтесь, чтобы график был по возможности компактным. (1 б.).
+
+```{r}
+ggplot (data, aes (x = Muggle.studies_exam)) +
+  geom_histogram(binwidth = 7, color = "black", fill = "skyblue") +
+  facet_grid(course~.) +
+  theme_bw()+
+  labs(x = "Баллы за экзамен по маггловедению",
+       y = "Количество студентов")
+```
+3. Отобразите на одном графике распределение плотности вероятности для
+оценки студентов на экзамене по защите от темных искусств и на
+экзамене по травологии. Раскрасьте их в любые выбранные вами цвета,
+постарайтесь, чтобы оба распределения отображались целиком.
+Примените тему из 3-го пункта блока “Разное”. Сделайте фасетирование
+по полу (1 б.).
+
+```{r, fig.height= 10, fig.width= 10}
+ggplot(data) +
+  geom_density(aes(x = Defence.against.the.dark.arts_exam, fill = "Защита от темных искусств"), alpha = 0.4) +
+  geom_density(aes(x = Herbology_exam, fill = "Гербология"), alpha = 0.4) +
+  theme_custom + 
+  facet_grid(sex ~ .) +
+  scale_fill_manual(values = c("Защита от темных искусств" = "black", "Гербология" = "lightgreen")) +
+  labs(x = "Балл", y = "Плотность", fill = "Экзамен") +
+  theme(strip.text = element_text(size = 25))
+```
+
