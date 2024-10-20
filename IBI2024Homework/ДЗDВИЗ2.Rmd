@@ -1,0 +1,665 @@
+---
+title: "ДЗВиз2"
+author: "Гладышев Никита Сергеевич"
+date: "2024-10-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ggpubr)
+library(ggExtra)
+theme_custom <- theme_minimal() +
+  theme(plot.title = element_text(size = 17, face = "bold"),
+        axis.title.x = element_text(size = 19),
+    axis.title.y = element_text(size = 19),
+    axis.text = element_text(size = 17),
+    legend.title = element_text(size = 19),
+    legend.text = element_text(size = 17),
+    strip.text = element_text(size = 19),
+    axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Диаграммы рассеяния (скаттерплоты)
+
+### 1. Постройте скаттерплот, визуализирующий связь между суммарным
+баллом студента за год и оценкой за экзамен по травологии. Добавьте на
+график линию тренда. Удалите доверительную область и сделайте линию
+прямой. Подумайте, как избежать того, чтобы записать одни и те же
+координаты x и y дважды. Проинтерпретируйте график. (1 б.)
+
+```{r cars}
+
+hogwarts <- read.csv ("hogwarts_2024.csv")
+hogwarts <- hogwarts %>% mutate (across(where(is.character), as.factor), course = as.factor (course))
+
+ggplot (hogwarts, aes (x = result, y = Herbology.exam)) +
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") +
+  geom_point (color = "black", shape = 21, size = 3) +
+  labs (x = "Результат",
+        y = "Экзамен по гербологии")+
+  theme_custom
+
+```
+*Ответ:* Чем выше оценка по экзамену "гербология", тем выше итоговый результат оценок (положительная корреляция). Это логично, так как, очевидно, отличники будут лучше готовиться к экзаменам, чем двоечники и сдадут другие экзамены лучше.
+
+
+### 2. Отобразите на одной иллюстрации скаттерплоты, аналогичные тому, что вы делали на первом задании, для экзаменов по травологии, магловедению, прорицаниям и зельеварению. На иллюстрации также должна присутствовать линия тренда с характеристиками, аналогичными тем, что были в пункте 1. Раскрасьте точки в разные цвета, в соответствии с факультетами. Используйте стандартные цвета факультетов (как в лекционных rmd). Проинтерпретируйте полученный результат. (1 б). Если вы создадите иллюстрацию из этого пункта, используя только пакеты семейства tidyverse, и не привлекая дополнительные средства, вы получите дополнительные 0.5 б.
+
+```{r, fig.height=7}
+
+
+house_colors <- c("Гриффиндор" = "#C50000", 
+                  "Пуффендуй" = "#ECB939", 
+                  "Когтевран" = "#41A6D9", 
+                  "Слизерин" = "#1F5D25")
+
+hogwarts %>%
+  select(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam, result, house) %>%
+  pivot_longer(
+    cols = c(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam),
+    names_to = "Предмет",
+    values_to = "Оценка"
+  ) %>%
+  mutate(
+    house = recode(house,
+                   "Gryffindor" = "Гриффиндор",
+                   "Hufflepuff" = "Пуффендуй",
+                   "Ravenclaw" = "Когтевран",
+                   "Slytherin" = "Слизерин"),
+    Предмет = recode(Предмет,
+                     "Herbology.exam" = "Травология",
+                     "Muggle.studies.exam" = "Магловедение",
+                     "Divinations.exam" = "Прорицания",
+                     "Potions.exam" = "Зельеварение")
+  ) %>%
+  ggplot(aes(x = Оценка, y = result, color = house)) +
+  geom_point(size = 1.5, alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  scale_color_manual(values = house_colors) +
+  labs(
+    title = "Соотношение оценок за экзамены с итоговым результатом за год",
+    x = "Оценка за экзамен",
+    y = "Итоговый результат за год",
+    color = "Факультет"
+  ) +
+  theme_custom +
+  facet_wrap(~Предмет, ncol = 2)
+
+
+
+```
+*Ответ:* 
+1. Во всех дисциплинах наблюдается прямая корреляция между итоговым результатом за год и оценкой за экзамен, за исключением дисциплины "Зельеварение". В данной дисциплине имеется слабая отрицательная зависимость, которую требуется дополнительно проверить статистически. Это может свидетельствовать о потенциальном завышении оценок, которое, вероятно, не связано с действительными способностями и уровнем подготовки учащихся.
+
+2. При рассмотрении результатов по факультетам можно отметить, что именно студенты факультета Слизерин демонстрируют повышенные оценки за экзамены по Зельеварению. У этой же группы наблюдается значительное разделение на подгруппы, в одной из которых итоговые результаты высоки, а в другой — низки, что может свидетельствовать о наличии двух различных популяций студентов внутри данного факультета.
+
+3. Кроме того, обращает на себя внимание высокий итоговый балл у студентов факультета Когтевран, что может указывать на их более высокий общий уровень подготовки.
+
+### 3. Видоизмените график, полученный на предыдущем шаге. Сгруппируйте и покрасьте линии тренда в соответствии с одной из категориальных переменных (с такой, которая подсвечивает одно из наблюдений на предыдущем этапе, относящееся ко всем 4-м экзаменам). Постарайтесь избежать коллизий в легенде, при этом сохранив и цветовую палитру для раскраски точек по факультетам. (1 б.)
+
+*Не совсем понятно, что значит подсвечивает одно из наблюдений на предыдущем этапе, взял пол, так как, вероятно, существует гендерная дискриминация*
+
+```{r}
+
+house_colors <- c(
+  "Гриффиндор" = "#C50000", 
+  "Пуффендуй" = "#ECB939", 
+  "Когтевран" = "#41A6D9", 
+  "Слизерин" = "#1F5D25"
+)
+
+hogwarts %>%
+  select(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam, result, house, sex) %>%
+  pivot_longer(
+    cols = c(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam),
+    names_to = "Предмет",
+    values_to = "Оценка"
+  ) %>%
+  mutate(
+    sex = recode(sex, "male" = "мужской", "female" = "женский"),
+    house = recode(house,
+                   "Gryffindor" = "Гриффиндор",
+                   "Hufflepuff" = "Пуффендуй",
+                   "Ravenclaw" = "Когтевран",
+                   "Slytherin" = "Слизерин"),
+    Предмет = recode(Предмет,
+                     "Herbology.exam" = "Травология",
+                     "Muggle.studies.exam" = "Магловедение",
+                     "Divinations.exam" = "Прорицания",
+                     "Potions.exam" = "Зельеварение")
+  ) %>%
+  ggplot(aes(x = Оценка, y = result)) +
+  geom_point(aes(color = house), size = 3, alpha = 0.6) +
+  geom_smooth(aes(color = sex), method = "lm", se = FALSE) +
+  scale_color_manual(name = "Факультет/Пол", values = c(
+    house_colors,
+    "женский" = "#FF69B4",
+    "мужской" = "#1E90FF"
+  )) +
+  labs(
+    x = "Оценка за экзамен",
+    y = "Итоговый результат за год"
+  ) +
+  theme_custom +
+  facet_wrap(~Предмет, ncol = 2)
+
+
+
+
+```
+*Ответ:* По предмету "зельеварение" в сравнении с итоговым результатом за код наблюдается разнонаправленная зависимость. Мальчики, вероятно, представляют собой группу с низким баллом за итоговый экзамен, но с высоким баллом за предмет зельеварение. Вероятнее всего, в других графиках также прослеживается та же закономерность. Выведем график только для зельеварения у слизаринцев и раскрасим точки сообразно полу.
+
+```{r}
+hogwarts %>% filter (house == "Slytherin") %>%
+   mutate(
+    sex = recode(sex, "male" = "мужской", "female" = "женский")) %>% 
+  ggplot (aes (x = Potions.exam, y = result, col = sex)) +
+  geom_point (size = 3) +
+  scale_color_manual(name = "Пол", values = c(
+    "женский" = "#FF69B4",
+    "мужской" = "#1E90FF")) +
+  labs (x = "Оценка за зельеварение",
+    y = "Итоговый результат за год") +
+  theme_custom
+```
+*Ответ*: Да, есть различие между половой принадлежностью и общему экзамену, стоит также заметить, что у женщин шире разброс по оценкам по зельеварению. Построим графики по другим качественным переменным в датафрейме и попробуем отыскать другие зависимости: 
+
+#### Курс
+
+```{r}
+house_colors <- c(
+  "Гриффиндор" = "#C50000", 
+  "Пуффендуй" = "#ECB939", 
+  "Когтевран" = "#41A6D9", 
+  "Слизерин" = "#1F5D25"
+)
+
+
+course_colors <- c("1" = "red", "2" = "blue", "3" = "green", "4" = "orange", "5" = "purple", "6" = "brown", "7" = "pink")
+
+hogwarts %>%
+  select(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam, result, house, course) %>%
+  pivot_longer(
+    cols = c(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam),
+    names_to = "Предмет",
+    values_to = "Оценка"
+  ) %>%
+  mutate(
+    house = recode(house,
+                   "Gryffindor" = "Гриффиндор",
+                   "Hufflepuff" = "Пуффендуй",
+                   "Ravenclaw" = "Когтевран",
+                   "Slytherin" = "Слизерин"),
+    Предмет = recode(Предмет,
+                     "Herbology.exam" = "Травология",
+                     "Muggle.studies.exam" = "Магловедение",
+                     "Divinations.exam" = "Прорицания",
+                     "Potions.exam" = "Зельеварение")
+  ) %>%
+  ggplot(aes(x = Оценка, y = result)) +
+  geom_point(aes(color = house), size = 3) +
+  geom_smooth(aes(color = course), method = "lm", se = FALSE) +
+  scale_color_manual(name = "Факультет/Курс", values = c(house_colors, course_colors), aesthetics = "color", guide = "legend") +
+  labs(
+    x = "Оценка за экзамен",
+    y = "Итоговый результат за год"
+  ) +
+  theme_minimal() +
+  facet_wrap(~Предмет, ncol = 2)
+
+
+```
+*Ответ:* В первом приближении нет зависимости.
+
+#### Палочка
+
+
+```{r}
+house_colors <- c(
+  "Гриффиндор" = "#C50000", 
+  "Пуффендуй" = "#ECB939", 
+  "Когтевран" = "#41A6D9", 
+  "Слизерин" = "#1F5D25"
+)
+
+wand_colors <- c(
+  "Сердечная жила дракона" = "red",
+  "Перо феникса" = "orange",
+  "Волос единорога" = "gray"
+)
+
+hogwarts %>%
+  select(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam, result, house, wandCore) %>%
+  pivot_longer(
+    cols = c(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam),
+    names_to = "Предмет",
+    values_to = "Оценка"
+  ) %>%
+  mutate(
+    house = recode(house,
+                   "Gryffindor" = "Гриффиндор",
+                   "Hufflepuff" = "Пуффендуй",
+                   "Ravenclaw" = "Когтевран",
+                   "Slytherin" = "Слизерин"),
+    Предмет = recode(Предмет,
+                     "Herbology.exam" = "Травология",
+                     "Muggle.studies.exam" = "Магловедение",
+                     "Divinations.exam" = "Прорицания",
+                     "Potions.exam" = "Зельеварение"),
+    wandCore = recode(wandCore,
+                      "dragon heartstring" = "Сердечная жила дракона",
+                      "phoenix feather" = "Перо феникса",
+                      "unicorn hair" = "Волос единорога")
+  ) %>%
+  ggplot(aes(x = Оценка, y = result)) +
+  geom_point(aes(color = house), size = 3) +
+  geom_smooth(aes(color = wandCore), method = "lm", se = FALSE) +
+  scale_color_manual(name = "Факультет/Палочка", values = c(house_colors, wand_colors)) +
+  labs(
+    x = "Оценка за экзамен",
+    y = "Итоговый результат за год"
+  ) +
+  theme_custom +
+  facet_wrap(~Предмет, ncol = 2)
+
+
+```
+
+*Ответ:* В первом приближении нет зависимости.
+
+#### Происхождение
+
+```{r, fig.width=10}
+house_colors <- c(
+  "Гриффиндор" = "#C50000", 
+  "Пуффендуй" = "#ECB939", 
+  "Когтевран" = "#41A6D9", 
+  "Слизерин" = "#1F5D25"
+)
+
+blood_colors <- c("Полукровка" = "red", "Маглорожденный" = "orange", "Чистокровный" = "gray")
+
+hogwarts %>%
+  select(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam, result, house, bloodStatus) %>%
+  pivot_longer(
+    cols = c(Herbology.exam, Muggle.studies.exam, Divinations.exam, Potions.exam),
+    names_to = "Предмет",
+    values_to = "Оценка"
+  ) %>%
+  mutate(
+    house = recode(house,
+                   "Gryffindor" = "Гриффиндор",
+                   "Hufflepuff" = "Пуффендуй",
+                   "Ravenclaw" = "Когтевран",
+                   "Slytherin" = "Слизерин"),
+    bloodStatus = recode(bloodStatus,
+                         "half-blood" = "Полукровка",
+                         "muggle-born" = "Маглорожденный",
+                         "pure-blood" = "Чистокровный"),
+    Предмет = recode(Предмет,
+                     "Herbology.exam" = "Травология",
+                     "Muggle.studies.exam" = "Магловедение",
+                     "Divinations.exam" = "Прорицания",
+                     "Potions.exam" = "Зельеварение")
+  ) %>%
+  ggplot(aes(x = Оценка, y = result)) +
+  geom_point(aes(color = house), size = 3) +
+  geom_smooth(aes(color = bloodStatus), method = "lm", se = FALSE) +
+  scale_color_manual(name = "Факультет/Происхождение", values = c(house_colors, blood_colors)) +
+  labs(
+    x = "Оценка за экзамен",
+    y = "Итоговый результат за год"
+  ) +
+  theme_custom +
+  facet_wrap(~Предмет, ncol = 2)
+
+```
+*Ответ:* В первом приближении нет зависимости.
+
+
+## geom_col и вещи вокруг него
+
+### 1. Постройте барплот (столбиковую диаграмму) распределения набранных баллов за первый семестр (с 1-й по 17-ю неделю включительно) у студентов разного происхождения. Если у вас возникают трудности, можете обратиться к шпаргалке по dplyr от posit. Выдвиньте гипотезу (или гипотезы), почему распределение получилось именно таким. (1 б.)
+
+```{r, fig.width=10}
+
+hogwarts %>%
+  mutate(Происхождение = case_when(
+    bloodStatus == "pure-blood" ~ "Чистокровный",
+    bloodStatus == "half-blood" ~ "Полукровка",
+    bloodStatus == "muggle-born" ~ "Маглорожденный",
+    TRUE ~ bloodStatus
+  )) %>%
+  select(Происхождение, week_1:week_17) %>%
+  pivot_longer(
+    cols = week_1:week_17,
+    names_to = "Неделя",
+    values_to = "Оценка"
+  ) %>%
+  group_by(Происхождение) %>%
+  summarise(`Общая оценка` = sum(Оценка)) %>%
+  ggplot(aes(x = Происхождение, y = `Общая оценка`, fill = Происхождение)) +
+  geom_col (color = "black") +
+  labs(
+    x = "Происхождение",
+    y = "Общая оценка",
+    fill = "Происхождение"
+  ) +
+  theme_custom
+
+```
+
+*Ответ:* Гипотеза в том, что полукровок в целом больше учится в Хогвартсе, соответственно общая оценка у них больше.
+### 2. Модифицируйте предыдущий график – отсортируйте столбцы в порядке убывания суммы баллов. Добавьте на график текстовые метки, отражающие число студентов каждого происхождения. Попробуйте использовать для этой задачи не geom_text, а geom_label. Настройте внешний вид geom_label по своему усмотрению. Поправьте название оси. Проинтерпретируйте график. Соотносится ли интерпретация с вашей гипотезой из пункта 1? (1 б.)
+
+```{r, fig.height=7}
+hogwarts %>%
+  mutate(Происхождение = case_when(
+    bloodStatus == "pure-blood" ~ "Чистокровный",
+    bloodStatus == "half-blood" ~ "Полукровка",
+    bloodStatus == "muggle-born" ~ "Маглорожденный",
+    TRUE ~ bloodStatus
+  )) %>%
+  select(Происхождение, week_1:week_17) %>%
+  pivot_longer(
+    cols = week_1:week_17,
+    names_to = "Неделя",
+    values_to = "Оценка"
+  ) %>%
+  group_by(Происхождение) %>%
+  summarise(
+    `Общая оценка` = sum(Оценка),
+    `Количество студентов` = n() / 17
+  ) %>%
+  ggplot(aes(x = fct_reorder(Происхождение, `Общая оценка`, .desc = TRUE), y = `Общая оценка`, fill = Происхождение)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_label(aes(label = `Количество студентов`), 
+             vjust = 2,
+             color = "black", 
+             fill = "white", 
+             size = 6, 
+             fontface = "bold") +
+  labs(
+    x = "Происхождение",
+    y = "Общая сумма баллов",
+    fill = "Происхождение"
+  ) +
+  theme_custom
+```
+*Ответ:* Да, с гипотезой соотносится, полукровок в ~4 раза больше, чем чистокровных и в 6.5 раз больше, чем маглорожденных
+
+### 3. И снова измените график – добавьте на него разбивку не только по происхождению, но и по полу. Раскрасьте столбцы по происхождению. Сделайте подписи к столбцам читаемыми. Дайте графику название, измените, если требуется, название осей. Сделайте шаг для оси, на которой отображены очки, через каждую тысячу баллов. Разместите текстовые метки по правому краю графика. Настройте график таким образом, чтобы метки были видны целиком и не обрезались. Сохраните график на устройство.(1.5 б.)
+
+
+```{r, fig.height=10, fig.width=10}
+
+hogwarts %>%
+  mutate(
+    Происхождение = case_when(
+      bloodStatus == "pure-blood" ~ "Чистокровный",
+      bloodStatus == "half-blood" ~ "Полукровка",
+      bloodStatus == "muggle-born" ~ "Маглорожденный",
+      TRUE ~ bloodStatus
+    ),
+    Пол = recode(sex, "male" = "Мужской", "female" = "Женский")
+  ) %>%
+  select(Происхождение, Пол, week_1:week_17) %>%
+  pivot_longer(
+    cols = week_1:week_17,
+    names_to = "Неделя",
+    values_to = "Оценка"
+  ) %>%
+  group_by(Происхождение, Пол) %>%
+  summarise(
+    `Общая оценка` = sum(Оценка),
+    `Количество студентов` = n() / 17,
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = fct_reorder(Происхождение, `Общая оценка`, .desc = TRUE), 
+             y = `Общая оценка`, 
+             fill = Происхождение)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), color = "black") +
+  geom_label(aes(label = `Количество студентов`), 
+             color = "black", 
+             fill = "white", 
+             size = 4, 
+             fontface = "bold") +
+  facet_wrap(~Пол, ncol = 2) +
+  scale_y_continuous(breaks = seq(0, 10000, by = 1000)) +
+  labs(
+    title = "Общая сумма баллов в зависимости от происхождения и пола",
+    x = "Происхождение студентов",
+    y = "Общая сумма баллов",
+    fill = "Происхождение"
+  ) +
+  theme_custom +
+  theme (legend.position = "none")
+
+ggsave("blood_gender_result_plot.png", width = 10, height = 10)
+
+```
+
+4. Изучите функцию coord_flip() . Как вы думаете, когда она может быть полезна? Как вы думаете, в чем ее плюсы и минусы? (дополнительные 0.5 б.)
+
+*Ответ:* Функция coord_flip() используется для переворота осей X и Y, что полезно, когда нужно быстро увидеть, как график будет смотреться в другом виде, адаптировать его для другого формата (например, для презентации вместо печати), или при наличии длинных и трудно читаемых категорий на оси X, делая график более удобным для восприятия. Она помогает улучшить читаемость меток, переворачивая их вертикально, но может рассматриваться как временное решение, и забыв о ее использовании, при дальнейших преобразованиях графика можно внести ошибки, делая его менее интуитивным. Также, если слишком много категорий, переворот осей может сделать график слишком высоким, что затрудняет его восприятие на экране или в распечатке.
+
+## Разное
+
+### 1. Сравните распределение баллов за экзамен по зельеварению и за экзамен по древним рунам. Сделайте это тремя разными способами. Под разными способами понимаются идеологически разные геомы или способы группировки. Не считаются разными способами изменения константных визуальных параметров (цвет заливки, размер фигур) на сходных в остальном графиках. Объедините графики, таким образом, чтобы результирующий график имел два столбца и 2 строки. Два графика должны находиться в верхней строке и занимать равную площадь. Третий график должен занимать нижнюю строку целиком. (2 б).
+
+```{r, fig.height=10, fig.width=10}
+
+
+hogwarts <- hogwarts %>%
+  mutate(house = recode(house,
+                        "Gryffindor" = "Гриффиндор",
+                        "Hufflepuff" = "Пуффендуй",
+                        "Ravenclaw" = "Когтевран",
+                        "Slytherin" = "Слизерин"),
+         sex = recode(sex,
+                      "male" = "Мужской",
+                      "female" = "Женский"))
+
+boxplot <- ggplot(hogwarts) +
+  geom_boxplot(aes(x = "Зельеварение", y = Potions.exam, fill = "Зельеварение"), width = 0.5, outlier.size = 1.5, outlier.shape = 21) +
+  geom_boxplot(aes(x = "Руны", y = Study.of.ancient.runes.exam, fill = "Руны"), width = 0.5, outlier.size = 1.5, outlier.shape = 21) +
+  labs(
+    x = "Экзамены",
+    y = "Баллы") +
+  theme_custom +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(40, 20, 20, 60),
+    strip.text = element_text(size = 10),
+    axis.title.y = element_text(margin = margin(t = 0, r = 60, b = 0, l = 0))
+  ) +
+  coord_flip() +
+  facet_grid(~sex)
+
+density_plot <- ggplot(hogwarts) +
+  geom_histogram(aes(x = Potions.exam, fill = "Зельеварение"), color = "black", alpha = 0.4, bins = 30) +
+  geom_histogram(aes(x = Study.of.ancient.runes.exam, fill = "Руны"), color = "black", alpha = 0.4, bins = 30) +
+  labs(
+    x = "Баллы",
+    y = "Частота",
+    fill = "Предмет") +
+  scale_fill_manual(values = c("Зельеварение" = "blue", "Руны" = "red")) +
+  theme_custom +
+  theme(
+    plot.margin = margin(20, 20, 20, 20),
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8)
+  )
+
+scatter_plot <- ggplot(hogwarts, aes(x = Potions.exam, y = Study.of.ancient.runes.exam, color = house)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(
+    x = "Зельеварение",
+    y = "Руны",
+    color = "Факультет") +
+  theme_custom +
+  scale_color_manual(values = c(
+    "Гриффиндор" = "#C50000",
+    "Пуффендуй" = "#ECB939",
+    "Когтевран" = "#41A6D9",
+    "Слизерин" = "#1F5D25"
+  )) 
+
+scatter_plot_with_density <- ggMarginal(
+  scatter_plot,
+  type = "density",
+  groupColour = TRUE,
+  groupFill = TRUE,
+  alpha = 0.5
+)
+
+combined_plot <- ggarrange(
+  ggarrange(boxplot, scatter_plot_with_density, ncol = 2, labels = c("A", "C"), widths = c(1, 1)),
+  density_plot,
+  ncol = 1, nrow = 2,
+  heights = c(1, 1.5),
+  labels = c("", "B")
+)
+
+print(combined_plot)
+
+```
+
+
+### 2. Визуализируйте средний балл по зельеварению студентов с различным происхождением. Вы вольны добавить дополнительные детали и информацию на график. Проинтерпретируйте результат. Как вы думаете, почему он именно такой? Если у вас есть гипотеза, проиллюстрируйте ее еще одним графиком (или графиками). Объедините их при помощи ggarrange. (по 1 б. за первый и график и правильную интерпретацию с подтверждением в виде второго графика и текстовой аргументации). Измените порядок ваших фигур на первом графике слева направо следующим образом: маглорожденные, чистокровные, полукровки. Скорректируйте название оси. Если у вас возникают сложности, обратитесь к шпаргалке по пакету forcats от posit. (Дополнительные 0.5 б.)
+
+```{r}
+hogwarts <- hogwarts %>%
+  mutate(blood_status = recode(bloodStatus,
+                               "pure-blood" = "Чистокровные",
+                               "half-blood" = "Полукровки",
+                               "muggle-born" = "Маглорожденные"))
+
+average_potions_plot <- hogwarts %>%
+  group_by(blood_status) %>%
+  summarise(
+    `Среднее значение` = mean(Potions.exam, na.rm = TRUE),
+    se = sd(Potions.exam, na.rm = TRUE) / sqrt(n()),
+    lower_ci = `Среднее значение` - qt(0.975, df = n() - 1) * se,
+    upper_ci = `Среднее значение` + qt(0.975, df = n() - 1) * se,
+  .groups = "drop") %>%
+  ggplot(aes(x = fct_relevel(blood_status, "Маглорожденные", "Чистокровные", "Полукровки"), 
+             y = `Среднее значение`, fill = blood_status)) +
+  geom_point(size = 3, color = "black") +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.2, color = "black") +
+  geom_jitter(data = hogwarts, aes(x = blood_status, y = Potions.exam), width = 0.2, alpha = 0.5, color = "gray") +
+  labs(
+    x = "Происхождение студента",
+    y = "Средний балл по зельеварению"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none"
+  )
+
+total_score_plot <- hogwarts %>%
+  group_by(blood_status, house, .groups = 'drop') %>%
+  summarise(
+    `Среднее значение` = mean(Potions.exam, na.rm = TRUE),
+    se = sd(Potions.exam, na.rm = TRUE) / sqrt(n()),
+    lower_ci = `Среднее значение` - qt(0.975, df = n() - 1) * se,
+    upper_ci = `Среднее значение` + qt(0.975, df = n() - 1) * se,
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = fct_relevel(blood_status, "Маглорожденные", "Чистокровные", "Полукровки"), 
+             y = `Среднее значение`, fill = blood_status)) +
+  geom_point(size = 3, color = "black") +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.2, color = "black") +
+  geom_jitter(data = hogwarts, aes(x = blood_status, y = Potions.exam), width = 0.2, alpha = 0.5, color = "gray") +
+  labs(
+    x = "Происхождение студента",
+    y = "Средний балл по зельеварению"
+  ) +
+  scale_fill_manual(values = c("Маглорожденные" = "blue", "Чистокровные" = "red", "Полукровки" = "green")) +
+  facet_wrap(~ house, ncol = 2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 13, hjust = 1),
+    legend.position = "none"
+  )
+
+combined_plot <- ggarrange(
+  average_potions_plot, total_score_plot,
+  ncol = 2,
+  labels = c("A", "B")
+)
+
+print(combined_plot)
+
+
+```
+*Ответ:* Из 1 графика видно, что маглорожденные, в среднем, получают меньший балл за зельеварение, чем другие, лишь единицы маглорожденных получают более, чем 75 баллов. У чистокровных и полукровок (которых большинство) ситуация другая. Есть предположение, что снейп делает дискриминацию в отношении происхождений, посмотрим по факультетам. Из рисунка B видно, что дискриминация идет не по происхождению, а по факту принадлежности к факультету.
+
+##Воспроизведение графика
+### 1. Дополнительное задание на 4 балла. Воспроизведите график максимально близко к оригиналу и проинтерпретируйте его.
+
+```{r, fig.width=10}
+hogwarts <- hogwarts %>%
+  mutate(
+    Факультет = case_when(
+      house == "Gryffindor" ~ "Гриффиндор",
+      house == "Hufflepuff" ~ "Пуффендуй",
+      house == "Ravenclaw" ~ "Когтевран",
+      house == "Slytherin" ~ "Слизерин",
+      TRUE ~ house
+    ),
+    Пол = case_when(
+      sex == "Женский" ~ "Девочки",
+      sex == "Мужской" ~ "Мальчики",
+      TRUE ~ sex
+    )
+  )
+
+house_colors <- c(
+  "Гриффиндор" = "#C50000",
+  "Пуффендуй" = "#ECB939",
+  "Когтевран" = "#41A6D9",
+  "Слизерин" = "#1F5D25"
+)
+
+ggplot(hogwarts, aes(x = Факультет, y = result, fill = Факультет)) +
+  geom_violin(trim = TRUE, alpha = 0.8, color = "black", size = 0.5) +
+  geom_boxplot(width = 0.1, position = position_dodge(width = 0.9), outlier.shape = NA, color = "black", fill = "white") +
+  stat_summary(data = hogwarts %>% filter(Факультет != "Слизерин"), 
+               fun = mean, geom = "point", shape = 23, size = 5, fill = "darkred", color = "black", stroke = 1.5) +
+  geom_point(data = hogwarts %>% filter(Факультет == "Слизерин"), aes(x = Факультет, y = 50), 
+             shape = 23, size = 5, fill = "darkred", color = "black", stroke = 1.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  scale_fill_manual(values = house_colors) +
+  scale_y_continuous(breaks = seq(-300, 250, by = 50), limits = c(-300, 250)) +
+  labs(
+    title = "Баллы студентов Хогвартса",
+    subtitle = "Распределение числа баллов у студентов различных факультетов Хогвартса в 2023-2024 учебном году",
+    x = NULL,
+    y = "Количество очков",
+    fill = "Факультет",
+    caption = "Источник: нездоровая фантазия автора лекции"
+  ) +
+  facet_grid(~ Пол) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "#8B4513"),
+    strip.text = element_text( size = 14),
+    strip.background = element_rect(fill = "grey85", color = "grey70"),
+    axis.title.y = element_text(size = 14),
+    axis.text.y = element_text(size = 12),
+    axis.text.x = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12, face = "italic"),
+    legend.box = "vertical",
+    legend.direction = "vertical",
+    plot.caption = element_text(size = 10)
+  )
+
+```
+#### Не понял по какому принципу ромбы изображаются)
