@@ -1,0 +1,479 @@
+---
+title: "automatization_notebook_04"
+output:
+  html_document:
+    df_print: paged
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library (RColorBrewer)
+library(DescTools)
+library(ggbeeswarm)
+library(Hmisc)
+library (corrplot)
+```
+
+# Чтение данных
+
+В вашем варианте нужно использовать датасет healthcare-dataset-stroke-data.
+
+```{r}
+
+df <- read.csv ("healthcare-dataset-stroke-data.csv", na.strings = "N/A")
+
+```
+
+# Выведите общее описание данных
+
+```{r}
+
+summary (df)
+
+```
+
+# Очистка данных
+
+1) Уберите переменные, в которых пропущенных значений больше 20% или уберите субъектов со слишком большим количеством пропущенных значений. Или совместите оба варианта. Напишите обоснование, почему вы выбрали тот или иной вариант:
+
+```{r}
+
+colMeans(is.na(df)) * 100
+
+```
+
+**Ответ**: так как процент пропущенных значений меньше 20% и количество переменных, в которых есть пропущенные значения = 1 => количество субъектов с большим количеством пропущенных значений равно нулю, не было необходимости в фильтрации. Было решено не убирать ни переменные, ни субъектов, чтобы сохранить как можно больше данных для анализа.
+
+2) Переименуйте переменные в человекочитаемый вид (что делать с пробелами в названиях?);
+
+```{r}
+df <- df %>%
+  rename_with(~ ifelse(grepl("^[A-Z]", .), tolower(.), .))
+```
+
+
+**Ответ**: так как у меня нет пробелов в названиях и переменные имеют человекочитаемый вид, я лишь унифицировал переменные, написав их все с маленькой буквы. Если бы у меня были пробелы, я бы их заменил, как у меня в датафрейме, знаком: "_", либо бы после пробела сделал букву заглавной и сличил бы 2 слова в одно.
+
+3) В соответствии с описанием данных приведите переменные к нужному типу (numeric или factor);
+
+```{r}
+df <- df %>% mutate (across (where(is.character), as.factor)) %>% mutate(across(where(~ all(. %in% c(0, 1))), as.factor)) %>%
+  mutate (id = as.factor (id))
+summary (df)
+
+```
+
+
+4) Отсортируйте данные по возрасту по убыванию;
+
+```{r}
+
+df <- df %>% arrange (desc (age))
+```
+
+
+5) Сохраните в файл outliers.csv субъектов, которые являются выбросами (например, по правилу трёх сигм) — это необязательное задание со звёздочкой;
+
+```{r}
+
+find_outliers_iqr <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR_value <- Q3 - Q1
+  outliers <- (x < (Q1 - 1.5 * IQR_value)) | (x > (Q3 + 1.5 * IQR_value))
+  return(outliers)
+}
+outliers_df <- df %>%
+  filter(if_any(where(is.numeric), find_outliers_iqr))
+write.csv(outliers_df, "outliers_iqr_df.csv")
+
+```
+**Ответ:** для поиска выбросов было использовано построение боксплотов (метод межквартильного размаха), и выбросы были выгружены в файл outliers.csv
+
+6) Присвойте получившийся датасет переменной "cleaned_data".
+
+```{r}
+cleaned_data <- df
+```
+
+# Сколько осталось переменных?
+
+```{r}
+
+paste0 ("Переменных осталось: ", length (colnames(cleaned_data)))
+
+```
+
+# Сколько осталось случаев?
+
+```{r}
+
+paste0 ("Случаев осталось: ", length (rownames (cleaned_data)))
+
+```
+
+# Есть ли в данных идентичные строки?
+
+```{r}
+if (any(duplicated(cleaned_data))) {
+  "Есть идентичные строки"
+} else {
+  "Идентичных строк нет"
+}
+```
+
+# Сколько всего переменных с пропущенными значениями в данных и сколько пропущенных точек в каждой такой переменной?
+
+```{r}
+
+paste0("Переменных с пропущенными значениями: ", 
+       sum(colSums(is.na(df)) > 0), ". Пропущенных точек в переменной: ", sum(colSums(is.na(df))))
+
+
+```
+
+# Описательные статистики
+
+## Количественные переменные
+
+1) Рассчитайте для всех количественных переменных для каждой группы (stroke):
+
+1.1) Количество значений;
+
+1.2) Количество пропущенных значений;
+
+1.3) Среднее;
+
+1.4) Медиану;
+
+1.5) Стандартное отклонение;
+
+1.6) 25% квантиль и 75% квантиль;
+
+1.7) Интерквартильный размах;
+
+1.8) Минимум;
+
+1.9) Максимум;
+
+1.10) 95% ДИ для среднего - задание со звёздочкой.
+
+```{r}
+summary_stats_num <- df %>%
+  group_by(stroke) %>%
+  summarise(across(where(is.numeric), list(
+    "Количество значений" = ~sum(!is.na(.)),
+    "Количество пропущенных значений" = ~sum(is.na(.)),
+    "Среднее" = ~mean(., na.rm = TRUE),
+    "Медиана" = ~median(., na.rm = TRUE),
+    "Стандартное отклонение" = ~sd(., na.rm = TRUE),
+    "25% квантиль" = ~quantile(., 0.25, na.rm = TRUE),
+    "75% квантиль" = ~quantile(., 0.75, na.rm = TRUE),
+    "Межквартильный размах" = ~IQR(., na.rm = TRUE),
+    "Минимум" = ~min(., na.rm = TRUE),
+    "Максимум" = ~max(., na.rm = TRUE),
+    "95% ДИ для среднего" = ~paste0(
+      round(mean(., na.rm = TRUE) - 1.96 * sd(., na.rm = TRUE) / sqrt(sum(!is.na(.))), 2), 
+      "-", 
+      round(mean(., na.rm = TRUE) + 1.96 * sd(., na.rm = TRUE) / sqrt(sum(!is.na(.))), 2))
+  ), .names = "{.fn} {.col}"))
+
+print (summary_stats_num)
+```
+
+## Категориальные переменные
+
+1) Рассчитайте для всех категориальных переменных для каждой группы (stroke):
+
+1.1) Абсолютное количество;
+
+1.2) Относительное количество внутри группы;
+
+1.3) 95% ДИ для доли внутри группы - задание со звёздочкой.
+
+```{r}
+result_all <- df %>%
+  select(where (is.factor), -id) %>% 
+  gather(key = "variable", value = "value", -stroke) %>%
+  group_by(stroke, variable, value) %>%
+  summarise("Абсолютное количество" = n(), .groups = 'drop') %>%
+  group_by(stroke, variable) %>%
+  mutate(
+    total = sum(`Абсолютное количество`),
+    "Относительное количество" = `Абсолютное количество` / total,
+    ci = BinomCI(`Абсолютное количество`, total, conf.level = 0.95),
+    "Нижняя граница 95% ДИ" = ci[, "lwr.ci"],
+    "Верхняя граница 95% ДИ" = ci[, "upr.ci"]
+    
+  ) %>%
+  rename ("Приступ" = stroke,
+          "Переменная" = variable,
+          "Значение" = value) %>%
+  ungroup() %>%
+  select(
+    `Приступ`,
+    `Переменная`,
+    `Значение`,
+    `Абсолютное количество`,
+    `Относительное количество`,
+    `Нижняя граница 95% ДИ`,
+    `Верхняя граница 95% ДИ`
+  )
+print (result_all)
+```
+
+# Визуализация
+
+## Количественные переменные
+
+1) Для каждой количественной переменной сделайте боксплоты по группам. Расположите их либо на отдельных рисунках, либо на одном, но читаемо;
+
+2) Наложите на боксплоты beeplots - задание со звёздочкой.
+
+3) Раскрасьте боксплоты с помощью библиотеки RColorBrewer.
+
+```{r}
+
+df_long <- df %>%
+  pivot_longer(cols = where(is.numeric), names_to = "variable", values_to = "value")
+
+
+palette_colors <- brewer.pal(n = 3, name = "Set3")
+
+ggplot(df_long, aes(x = factor(stroke, levels = c(0, 1), labels = c("Не было", "Был")), y = value, fill = stroke)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7, position = position_dodge(width = 0.8)) +
+  geom_beeswarm(alpha = 0.05, size = 1, cex = 0.4, aes(color = stroke), position = position_dodge(width = 0.8)) +
+  facet_wrap(~variable, scales = "free_y", labeller = as_labeller(c("age" = "Возраст", "avg_glucose_level" = "Уровень глюкозы",
+                                                                    "bmi" = "ИМТ"))) +
+  scale_fill_manual(values = palette_colors) +
+  scale_color_manual(values = c("#7CCD7C", "#912CEE")) +
+  labs(x = "Приступ", y = "Значения") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+## Категориальные переменные
+
+1) Сделайте подходящие визуализации категориальных переменных. Обоснуйте, почему выбрали именно этот тип.
+
+```{r}
+
+cleaned_cat <- cleaned_data %>% 
+  select (where(is.factor), -id) %>% mutate (across(where(~all(. %in% c(1, 0))), ~ifelse (. == 1, "Yes", "No"))) %>%
+  mutate (across(where (is.character), as.factor)) %>%
+  mutate(across(where(is.factor), ~ str_to_title(.)))
+  
+  
+
+cleaned_cat %>%
+  pivot_longer(cols = c("gender", "hypertension", "heart_disease", "ever_married", "work_type", "residence_type", "smoking_status", "stroke"),
+               names_to = "variable",
+               values_to = "value") %>%
+  count(variable, value) %>%
+  ggplot(aes(x = variable, y = n, fill = value)) +
+  geom_bar(stat = "identity", position = "stack", alpha = 0.7, color = "black") +
+  geom_text(aes(label = value, group = value), 
+            position = position_stack(vjust = 0.5), size = 3, color = "black") +
+  labs(x = "Переменная", y = "Количество") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  theme(legend.position = "none")
+
+
+```
+*Ответ:* Для визуализации категориальных переменных был выбран суммированный барплот (stacked bar plot), так как он позволяет одновременно оценить как распределение категорий в каждой переменной, так и относительные доли уровней переменной внутри каждой группы. Использование параметра stat = "identity" обеспечивает отображение фактического количества наблюдений, а параметр position = "stack" помогает ясно видеть вклад каждой категории в общую массу. Альтернативные варианты, такие как side-by-side bar plots, могут усложнить восприятие пропорций внутри групп, а круговые диаграммы (pie charts) менее информативны при сравнении нескольких категорий. Таким образом, выбранный тип графика наиболее эффективно представляет данные и упрощает их интерпретацию.
+
+
+# Статистические оценки
+
+## Проверка на нормальность
+
+1) Оцените каждую переменную на соответствие нормальному распределению с помощью теста Шапиро-Уилка. Какие из переменных являются нормальными и как как вы это поняли?
+
+```{r}
+
+shapiro_results <- cleaned_data %>%
+  select(where(is.numeric)) %>%
+  summarise(across(everything(), ~ {
+    sampled_values <- sample(., 5000, replace = TRUE)
+    shapiro.test(sampled_values)$p.value
+  }, .names = "{col}_ShapiroPVal"))
+print(shapiro_results)
+
+```
+*Ответ:* Ни одна из переменных не соответствует нормальному распредлению, так как есть основания отвергнуть нулевую гипотезу о равенстве нормального и искомого распределения.
+
+
+2) Постройте для каждой количественной переменной QQ-плот. Отличаются ли выводы от теста Шапиро-Уилка? Какой метод вы бы предпочли и почему?
+
+```{r}
+
+cleaned_data %>% select (where (is.numeric)) %>% 
+  pivot_longer(cols = everything(),
+               names_to = "variable",
+               values_to = "value") %>% 
+  ggplot(aes(sample = value)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ variable, scales = "free", ncol = 2) +
+  labs(x = "Теоретические квантили",
+       y = "Выборочные квантили") +
+  theme_minimal()
+
+```
+*Ответ:* Выводы теста Шапиро-Уилка и QQ-плотов в данном случае совпадают: оба метода указывают на отклонение от нормального распределения. Однако я бы не стал отдавать предпочтение какому-либо одному методу, так как оба они имеют свои преимущества и ограничения.QQ-плоты позволяют визуально оценить, насколько данные отклоняются от нормального распределения. Они особенно полезны для выявления специфических паттернов отклонений, таких как скошенность или наличие выбросов, которые не всегда улавливаются статистическими тестами.Тест Шапиро-Уилка, с другой стороны, предоставляет формальную статистическую оценку, но может быть излишне строг при больших объемах данных, выявляя незначительные отклонения от нормальности, которые могут не иметь практического значения. В то же время, при малых выборках он может быть недостаточно чувствительным.Таким образом, я бы использовал оба метода в совокупности: QQ-плот для визуальной проверки на наличие явных отклонений и тест Шапиро-Уилка для статистической проверки. Это дает более сбалансированное представление о распределении данных.
+
+3) Ниже напишите, какие ещё методы проверки на нормальность вы знаете и какие у них есть ограничения.
+
+*Ответ:* Существуют различные методы проверки нормальности, включая тест Колмогорова-Смирнова (с ограничениями, схожими с тестом Шапиро-Уилка), тест Лиллиефорса (чувствителен к выбросам), тест Андресона-Дарлинга (более чувствителен к хвостам распределения), тест Харке-Бера (основан на асимметрии и эксцессе, но может быть нечувствителен к выбросам), и анализ гистограммы или графика плотности (субъективен и может не выявлять отклонения в хвостах). Кроме того, боксплоты и коэффициенты асимметрии и эксцесса предоставляют полезные визуальные и числовые оценки, но имеют ограничения при сложных распределениях и выбросах.
+
+
+## Сравнение групп
+
+1) Сравните группы (переменная **stroke**) по каждой переменной (как количественной, так и категориальной). Для каждой переменной выберите нужный критерий и кратко обоснуйте его выбор в комментариях.
+
+```{r}
+cleaned_data1 <- cleaned_data %>% select(-id)
+
+get_variable_type <- function(var, threshold = 10) {
+  if (is.factor(var) || is.character(var) <= threshold) {
+    return('categorical')
+  } else if (is.numeric(var)) {
+    return('quantitative')
+  } else {
+    return('other')
+  }
+}
+
+results <- list()
+
+variables <- names(cleaned_data1)
+
+variables <- variables[variables != 'stroke']
+
+for (var_name in variables) {
+  var1 <- cleaned_data1[['stroke']]
+  var2 <- cleaned_data1[[var_name]]
+  
+  type1 <- get_variable_type(var1)
+  type2 <- get_variable_type(var2)
+  
+  if (type1 == 'categorical' && type2 == 'categorical') {
+    contingency_table <- table(var1, var2)
+    if (all(dim(contingency_table) > 1)) {
+      chi_test <- suppressWarnings(chisq.test(contingency_table, correct = FALSE))
+      expected_counts <- chi_test$expected
+      if (all(expected_counts > 5)) {
+        p_value <- chi_test$p.value
+        test <- 'Хи-квадрат тест'
+      } else {
+        tryCatch({
+          test_result <- fisher.test(contingency_table)
+          p_value <- test_result$p.value
+          test <- 'Точный критерий Фишера'
+        }, error = function(e) {
+          p_value <- NA
+          test <- 'Точный критерий Фишера (неприменим)'
+        })
+      }
+    } else {
+      p_value <- NA
+      test <- 'Тест неприменим'
+    }
+  } else if ((type1 == 'categorical' && type2 == 'quantitative') ||
+             (type1 == 'quantitative' && type2 == 'categorical')) {
+    if (type1 == 'categorical') {
+      categorical_var <- var1
+      quantitative_var <- var2
+    } else {
+      categorical_var <- var2
+      quantitative_var <- var1
+    }
+    groups <- unique(na.omit(categorical_var))
+    if (length(groups) == 2) {
+      group1 <- quantitative_var[categorical_var == groups[1]]
+      group2 <- quantitative_var[categorical_var == groups[2]]
+      if (length(na.omit(group1)) > 1 && length(na.omit(group2)) > 1) {
+        test_result <- wilcox.test(group1, group2, exact = FALSE)
+        p_value <- test_result$p.value
+        test <- 'Тест Вилкоксона (Манна-Уитни)'
+      } else {
+        p_value <- NA
+        test <- 'Тест Вилкоксона (неприменим)'
+      }
+    } else {
+      p_value <- NA
+      test <- 'Тест Вилкоксона (неприменим)'
+    }
+  } else {
+    p_value <- NA
+    test <- 'Тест неприменим'
+  }
+  
+  result <- data.frame(
+    переменная1 = 'stroke',
+    переменная2 = var_name,
+    p_value = p_value,
+    тест = test,
+    stringsAsFactors = FALSE
+  )
+  results[[length(results) + 1]] <- result
+}
+
+results_df <- do.call(rbind, results)
+print(results_df)
+
+```
+
+*Ответ:* Так как распределения не подчиняются нормальному закону для количественных переменных было решено использовать критерий Вилкоксона (с другой стороны, выборка достаточно большая и можно было бы использовать t.test, но, исходя из задания намек был понят ;))
+
+
+# Далее идут **необязательные** дополнительные задания, которые могут принести вам дополнительные баллы в том числе в случае ошибок в предыдущих
+
+## Корреляционный анализ
+
+1) Создайте корреляционную матрицу с визуализацией и поправкой на множественные сравнения. Объясните, когда лучше использовать корреляционные матрицы и в чём минусы и плюсы корреляционных исследований.
+
+```{r}
+
+forcor <- cleaned_data %>% select (is.numeric)
+cor_results <- rcorr(as.matrix(forcor), type = "spearman")
+
+cor_matrix <- cor_results$r
+p.mat <- cor_results$P
+
+p.adjusted <- p.adjust(p.mat[lower.tri(p.mat)], method = "holm")
+p.mat[lower.tri(p.mat)] <- p.adjusted
+
+corrplot(
+  cor_matrix, 
+  method = "number",          
+  type = "lower",            
+  p.mat = p.mat,             
+  sig.level = 0.05,          
+  insig = "blank",           
+  tl.col = "black",          
+  col = colorRampPalette(c("red", "white", "blue"))(200)
+)
+
+
+```
+*Ответ:* Корреляционные матрицы полезны для выявления линейных или монотонных взаимосвязей между количественными переменными и лучше всего подходят для анализа до 10-15 переменных, поскольку при большем количестве визуализация становится менее наглядной. Плюсы корреляционных исследований — это простота интерпретации, быстрота вычисления и возможность выявить взаимосвязи. Однако минусы включают отсутствие информации о причинно-следственных связях, чувствительность к выбросам и неспособность выявлять нелинейные или сложные многомерные зависимости между переменными.
+
+## Моделирование
+
+1) Постройте регрессионную модель для переменной **stroke**. Опишите процесс построения
+
+```{r}
+
+formodel <- cleaned_data %>% select (-id)
+model <- glm(stroke ~ ., data = formodel, family = binomial)
+summary(model)
+
+```
+
+*Ответ:* Для построения регрессионной модели для переменной stroke была использована логистическая регрессия, так как переменная stroke является бинарной (имеет два возможных значения).
