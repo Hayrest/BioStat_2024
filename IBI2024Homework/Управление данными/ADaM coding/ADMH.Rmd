@@ -63,7 +63,7 @@ MH_moderate <- ADS_MH_selected %>%
   mutate (MHENRF = ifelse (MHENRTPT == "ONGOING", "ONGOING", ""))
 ```
 
-# Объединим данные
+# Исправляем получившийся датасет под требования
 
 ```{r}
 
