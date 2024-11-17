@@ -1,0 +1,610 @@
+---
+title: "Продвинутая визуализация"
+author: "Hayrest"
+date: "2024-11-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library (tidyverse)
+library (ggpubr)
+library (rstatix)
+library (Hmisc)
+library (ggcorrplot)
+library (pheatmap)
+library(ggbiplot)
+library(factoextra)
+
+```
+
+
+1.	Загрузите датасет very_low_birthweight.RDS (лежит в папке домашнего задания). 
+Это данные о 671 младенце с очень низкой массой тела (<1600 грамм), собранные в Duke University Medical Center доктором Майклом О’Ши c 1981 по 1987 г.   Описание переменных см. здесь. Переменными исхода являются колонки 'dead', а также время от рождения до смерти или выписки (выводятся из 'birth' и 'exit'. 7 пациентов были выписаны до рождения). 
+Сделайте копию датасета, в которой удалите колонки с количеством пропусков больше 100, а затем удалите все строки с пропусками.
+
+```{r}
+BW <- readRDS("very_low_birthweight.RDS")
+
+BW_withoutNA <- BW %>% 
+  select (where (~ sum (is.na(.)) < 100)) %>% 
+  drop_na () %>% 
+  mutate (across (where (is.character), as.factor),
+    across(where(~ is.numeric(.) && all(. %in% c(0, 1))), as.factor))
+```
+
+
+2.	Постройте графики плотности распределения для числовых переменных. Удалите выбросы, если таковые имеются. Преобразуйте категориальные переменные в факторы. Для любых двух числовых переменных раскрасьте график по переменной ‘inout’.
+
+# Строим графики плотности распределения для всех числовых переменных
+
+```{r, fig.width=10, fig.height=10}
+
+numeric_data <- BW_withoutNA %>% 
+  select(where(is.numeric))
+
+plots <- list()
+for (i in seq_along(numeric_data)) {
+  var_name <- names(numeric_data)[i]
+  
+  p <- ggplot(data = BW_withoutNA, aes_string(x = var_name)) + 
+    geom_density(fill = "cyan", alpha = 0.4) +
+    labs(x = var_name) +
+    theme_bw()
+  
+  plots[[var_name]] <- p
+}
+
+library(ggpubr)
+combined_plot <- ggarrange(plotlist = plots, ncol = 2, nrow = ceiling(length(plots) / 2))
+print(combined_plot)
+  
+
+```
+
+# Удаляем выбросы
+
+```{r}
+
+# Решил взять стратегию, что выбросы больше и меньше 1.5IQR от Q3 и Q1, оответственно
+
+remove_outliers_df <- function(data) {
+  numeric_vars <- names(data)[sapply(data, is.numeric)]
+  for (col in numeric_vars) {
+    Q1 <- quantile(data[[col]], 0.25, na.rm = TRUE)
+    Q3 <- quantile(data[[col]], 0.75, na.rm = TRUE)
+    IQR <- Q3 - Q1 
+    data <- data %>%
+      filter(data[[col]] >= (Q1 - 1.5 * IQR) & data[[col]] <= (Q3 + 1.5 * IQR))}
+  return(data)}
+
+BW_withoutNA <- remove_outliers_df(BW_withoutNA) %>% glimpse ()
+
+```
+# Сгруппируем бимодальные apg1 и lowph по переменной inout
+
+```{r, fig.width=9}
+
+p1 <- BW_withoutNA %>% 
+  select (apg1, inout) %>%
+  ggplot (aes (apg1, fill = inout)) + 
+  geom_density(alpha = 0.5) +
+  theme_bw ()
+
+p2 <- BW_withoutNA %>% 
+  select (lowph, inout) %>%
+  ggplot (aes (lowph, fill = inout)) + 
+  geom_density(alpha = 0.5) +
+  theme_bw ()
+
+ggarrange(p1, p2)
+```
+
+
+3.	Проведите тест на сравнение значений колонки ‘lowph’ между группами в переменной inout. Вид статистического теста определите самостоятельно. Визуализируйте результат через библиотеку 'rstatix'. Как бы вы интерпретировали результат, если бы знали, что более низкое значение lowph ассоциировано с более низкой выживаемостью?
+
+```{r}
+
+t_test_result <- rstatix::t_test(lowph ~ inout, data = BW_withoutNA) %>%
+  add_significance() %>%
+  mutate(y.position = max(BW_withoutNA$lowph, na.rm = TRUE) + 0.1)
+
+BW_withoutNA %>%
+  ggboxplot(x = "inout", y = "lowph", add = "jitter") +
+  stat_pvalue_manual(t_test_result, label = "p.signif", tip.length = 0.02) +
+  theme_bw()
+
+```
+**Ответ на последний вопрос:** Низкий уровень *pH* в крови связан с худшим прогнозом у новорожденных, так как этот показатель говорит о гипоксии плода или ацидозе, что через патогенетические пути может влиять на исход.
+
+4.	Сделайте новый датафрейм, в котором оставьте только континуальные или ранговые данные, кроме 'birth', 'year' и 'exit'. Сделайте корреляционный анализ этих данных. Постройте два любых типа графиков для визуализации корреляций.
+
+```{r}
+
+BW_Corr <- BW_withoutNA %>%
+  select(where(is.numeric), -c(birth, year, exit))
+
+cor_res <- rcorr (as.matrix (BW_Corr), type = "spearman")
+
+ggcorrplot(
+  cor_res$r,
+  p.mat = cor_res$P,
+  sig.level = 0.05,
+  method = "circle",
+  type = "lower",
+  lab = TRUE
+)
+
+GGally::ggpairs(BW_Corr)
+
+BW_Corr %>%
+  mutate_all(as.numeric) %>%
+  cor(method="spearman") %>% 
+  corrr:: network_plot(legend=c("range"),min_cor = .0)
+
+```
+
+
+5.	Постройте иерархическую кластеризацию на этом датафрейме.
+
+```{r, fig.width=10}
+
+
+dist_matrix <- dist(BW_Corr, method = "euclidean")
+hcrow <- hclust(dist_matrix, method = "ward.D2")
+
+fviz_dend(hcrow, 
+          k = 4,
+          cex = 0.5,
+          k_colors = c("#2E9FDF", "#E7B800", "#FC4E07", "lightgreen"),
+          color_labels_by_k = TRUE,
+          rect = TRUE)
+
+dist_matrix <- dist(t(BW_Corr), method = "euclidean")
+hccol <- hclust(dist_matrix, method = "ward.D2")
+
+fviz_dend(hccol, 
+          k = 3,
+          cex = 0.5,
+          k_colors = c("#2E9FDF", "#E7B800", "#FC4E07"),
+          color_labels_by_k = TRUE,
+          rect = TRUE)
+
+
+```
+
+
+6.	Сделайте одновременный график heatmap и иерархической кластеризации. Интерпретируйте результат.
+
+```{r}
+library(pheatmap)
+
+pheatmap(
+  as.matrix(BW_Corr),
+  scale = "column",
+  cluster_rows = hcrow,
+  cluster_cols = hccol,
+  angle_col = 0
+)
+
+```
+**Вывод:** Часть детей с низкой массой при рождении имеют нихкий уровень тромбоцитов и большим количеством дней прибывания в госпитале. Срок гестации, низкий *pH* и балл по шкале апгар и количество дней в госпитале ассоциированы между собой.
+
+7.	Проведите PCA анализ на этих данных. Проинтерпретируйте результат. Нужно ли применять шкалирование для этих данных перед проведением PCA?
+
+```{r}
+BW_PCA<- prcomp(BW_Corr, scale = TRUE)
+
+summary (BW_PCA)
+
+fviz_eig(BW_PCA, 
+         addlabels = T)
+
+fviz_contrib(BW_PCA, choice = "var", axes = 1, top = 24)
+
+fviz_contrib(BW_PCA, choice = "var", axes = 2, top = 24) 
+
+fviz_contrib(BW_PCA, choice = "var", axes = 3, top = 24) 
+
+fviz_pca_var(BW_PCA, col.var = "contrib")
+
+```
+**Вывод:** Первые 2 компоненты объясняют более 60% дисперсии, что является неплохим показателем. В первую компоненту наибольший вклад вносят вес, срок гестации и время пребывания в больнице, во вторую - количество тромбоцитов и баллы по шкале Апгар. Нужно, так как переменные имеют разные размерности, а на предыдущих этапах шкалирование не было произведено.
+
+8.	Постройте biplot график для PCA. Раскрасьте его по значению колонки 'dead'.
+
+```{r}
+BW_withoutNA <- BW_withoutNA %>% mutate (id = 1:nrow(BW_withoutNA))
+
+p1 <- ggbiplot(BW_PCA, 
+         scale=0, 
+         groups = as.factor(BW_withoutNA$dead), 
+         ellipse = T,
+         alpha = 0.2) +
+  theme_bw()
+p1
+```
+
+
+9.	Переведите последний график в 'plotly'. При наведении на точку нужно, чтобы отображалось id пациента.
+
+```{r}
+library(plotly)
+
+p1 <- p1 + 
+  geom_point(
+    data = p1$data, 
+    aes(
+      x = xvar, 
+      y = yvar, 
+      color = groups, 
+      text = paste("ID пациента:", BW_withoutNA$id)
+    ),
+    alpha = 0)
+
+p1 <- ggplotly(p1, tooltip = c("text"))
+
+n_cases <- length(unique(BW_withoutNA$dead))
+for (i in 1:n_cases) {
+  p1$x$data[[i]]$name <- as.character(i - 1)
+  p1$x$data[[i]]$legendgroup <- i
+  p1$x$data[[i + n_cases]]$name <- as.character(i - 1)
+  p1$x$data[[i + n_cases]]$legendgroup <- i
+  p1$x$data[[i + n_cases]]$showlegend <- FALSE
+}
+
+for (i in (n_cases + 1):(2 * n_cases)) {
+  p1$x$data[[i]]$line$width <- 2
+  p1$x$data[[i]]$line$dash <- "solid"}
+
+arrow_index <- 2 * n_cases + 1
+p1$x$data[[arrow_index]]$x <- p1$x$data[[arrow_index]]$x + 0.05 * sign(p1$x$data[[arrow_index]]$x)
+p1$x$data[[arrow_index]]$y <- p1$x$data[[arrow_index]]$y + 0.05 * sign(p1$x$data[[arrow_index]]$y)
+
+p1$x$layout$legend$title$text <- "Dead Groups"
+p1$x$layout$xaxis$title <- "Principal Component 1"
+p1$x$layout$yaxis$title <- "Principal Component 2"
+
+p1$x$layout$legend <- list(
+  x = 1.1,
+  y = 1,
+  bgcolor = "rgba(255,255,255,0.8)",
+  bordercolor = "black",
+  borderwidth = 1)
+
+p1
+
+
+
+```
+
+
+10.	Дайте содержательную интерпретацию PCA анализу. Почему использовать колонку 'dead' для выводов об ассоциации с выживаемостью некорректно? 
+
+  PCA помогает выделить основные направления, где данные варьируются сильнее всего, представив их через комбинации исходных переменных. В нашем случае видно, что дети с более высоким уровнем тромбоцитов, баллов по шкале Апгар и уровнем pH чаще относятся к группе выживших. Это наглядно отражено на biplot: точки, представляющие такие наблюдения, группируются ближе, а стрелки этих переменных указывают на их значительный вклад в главные компоненты.
+
+  PCA не анализирует ассоциации или связи между переменными. Он только показывает, какие комбинации переменных объясняют разброс данных. PCA не может сказать, что именно влияет на выживаемость или быть доказательством причинности. Для анализа таких связей нужны другие подходы, например, логистическая регрессия.
+
+11.	Приведите ваши данные к размерности в две колонки через UMAP. Сравните результаты отображения точек между алгоритмами PCA и UMAP.
+
+```{r}
+library(tidymodels)
+library(embed)
+
+umap_prep <- recipe(~., data = BW_Corr) %>% 
+  step_normalize(all_predictors()) %>% 
+  step_umap(all_predictors(), neighbors = 15, num_comp = 2, min_dist = 0.01) %>%  
+  prep() 
+umap_data <- juice(umap_prep)
+colnames(umap_data) <- c("UMAP1", "UMAP2")
+umap_data$dead <- BW_withoutNA$dead
+
+umap_plot <- ggplot(umap_data, aes(x = UMAP1, y = UMAP2, color = dead)) +
+  geom_point(alpha = 0.7, size = 2) +
+  theme_minimal() +
+  ggtitle("UMAP")
+
+pca_data <- as.data.frame(BW_PCA$x[, 1:2])
+colnames(pca_data) <- c("PC1", "PC2")
+pca_data$dead <- BW_withoutNA$dead
+
+pca_plot <- ggplot(pca_data, aes(x = PC1, y = PC2, color = dead)) +
+  geom_point(alpha = 0.7, size = 2) +
+  theme_minimal() +
+  ggtitle("PCA")
+
+ggarrange(pca_plot, umap_plot)
+
+
+```
+
+**Вывод:** После PCA точки распределяются равномерно, так как метод сохраняет глобальную структуру данных и максимизирует дисперсию, тогда как UMAP формирует локальные сгустки, поскольку фокусируется на сохранении локальной структуры и ближайших соседей.
+
+12.	Давайте самостоятельно увидим, что снижение размерности – это группа методов, славящаяся своей неустойчивостью. Измените основные параметры UMAP (n_neighbors и min_dist) и проанализируйте, как это влияет на результаты.
+
+
+```{r, fig.width=10}
+
+param_grid <- expand.grid(
+  n_neighbors = c(5, 15, 50),
+  min_dist = c(0.01, 0.1, 0.5))
+
+plot <- list ()
+
+for (i in 1:nrow(param_grid)) {
+  recipe_umap <- recipe(~., data = BW_Corr) %>%
+    step_normalize(all_predictors()) %>%
+    step_umap(
+      all_predictors(),
+      neighbors = param_grid$n_neighbors[i],
+      num_comp = 2,
+      min_dist = param_grid$min_dist[i]) %>%
+    prep()
+  
+  umap_data <- juice(recipe_umap)
+  colnames(umap_data) <- c("UMAP1", "UMAP2")
+  umap_data$dead <- BW_withoutNA$dead
+  
+  plot <- ggplot(umap_data, aes(x = UMAP1, y = UMAP2, color = dead)) +
+    geom_point(alpha = 0.7, size = 2) +
+    theme_minimal() +
+    ggtitle(paste(
+      "n_neighbors =", param_grid$n_neighbors[i],
+      ", min_dist =", param_grid$min_dist[i]))
+  
+  plots[[i]] <- plot}
+
+ggarrange (plotlist = plots, ncol = 3)
+```
+**Вывод:** Изменение параметров вляет на баланс между локальной и глобальной структурой. Малые значения лучше использовать для подчеркивания локальных кластеров, тогда как большие значения сохраняют глобальную структуру.
+
+13.	Давайте самостоятельно увидим, что снижение размерности – это группа методов, славящаяся своей неустойчивостью. Пермутируйте 50% и 100% колонки 'bwt'. Проведите PCA и UMAP анализ. Наблюдаете ли вы изменения в куммулятивном проценте объяснённой вариации PCA? В итоговом представлении данных на биплотах для PCA? Отличается ли визуализация данных?
+
+```{r, fig.width=10, fig.height=10}
+
+permute_column <- function(data, column, proportion) {
+  n <- nrow(data)
+  idx <- sample(1:n, size = round(proportion * n))
+  data[[column]][idx] <- sample(data[[column]][idx])
+  return(data)}
+
+data_original <- BW_Corr
+data_perm_50 <- permute_column(data_original, "bwt", 0.5)
+data_perm_100 <- permute_column(data_original, "bwt", 1.0)
+
+perform_pca <- function(data) {
+  prcomp(scale(data), center = TRUE, scale. = TRUE)}
+
+pca_original <- perform_pca(data_original)
+pca_perm_50 <- perform_pca(data_perm_50)
+pca_perm_100 <- perform_pca(data_perm_100)
+
+perform_umap <- function(data) {
+  recipe(~., data = data) %>%
+    step_normalize(all_predictors()) %>%
+    step_umap(all_predictors(), neighbors = 15, num_comp = 2, min_dist = 0.1) %>%
+    prep() %>%
+    juice()}
+
+umap_original <- as.data.frame(perform_umap(data_original))
+colnames(umap_original) <- c("UMAP1", "UMAP2")
+umap_original$dead <- BW_withoutNA$dead
+
+umap_perm_50 <- as.data.frame(perform_umap(data_perm_50))
+colnames(umap_perm_50) <- c("UMAP1", "UMAP2")
+umap_perm_50$dead <- BW_withoutNA$dead
+
+umap_perm_100 <- as.data.frame(perform_umap(data_perm_100))
+colnames(umap_perm_100) <- c("UMAP1", "UMAP2")
+umap_perm_100$dead <- BW_withoutNA$dead
+
+pca_biplot <- function(pca_model, title) {
+  ggbiplot(
+    pca_model,
+    groups = BW_withoutNA$dead,
+    ellipse = TRUE,
+    varname.size = 3,
+    alpha = 0.6) +
+    theme_minimal() +
+    ggtitle(title)}
+
+pca_original_biplot <- pca_biplot(pca_original, "PCA: Original")
+pca_perm_50_biplot <- pca_biplot(pca_perm_50, "PCA: Permuted 50%")
+pca_perm_100_biplot <- pca_biplot(pca_perm_100, "PCA: Permuted 100%")
+
+umap_plot <- function(umap_data, title) {
+  ggplot(umap_data, aes(x = UMAP1, y = UMAP2, color = dead)) +
+    geom_point(alpha = 0.7, size = 2) +
+    theme_minimal() +
+    ggtitle(title)}
+
+umap_original_plot <- umap_plot(umap_original, "UMAP: Original")
+umap_perm_50_plot <- umap_plot(umap_perm_50, "UMAP: Permuted 50%")
+umap_perm_100_plot <- umap_plot(umap_perm_100, "UMAP: Permuted 100%")
+
+combined_plot <- ggarrange(
+  pca_original_biplot, pca_perm_50_biplot, pca_perm_100_biplot,
+  umap_original_plot, umap_perm_50_plot, umap_perm_100_plot,
+  ncol = 3, 
+  nrow = 2, 
+  labels = c("A", "B", "C", "D", "E", "F"),
+  common.legend = TRUE, 
+  legend = "bottom")
+
+print(combined_plot)
+
+```
+**Ответ:** 
+  Изменения доли объясненной дисперсии: Да, с увеличением уровня пермутации уменьшается доля объясненной дисперсии главными компонентами. Это указывает на разрушение структуры данных и снижение способности PCA выделять значимые направления вариации.
+
+  Изменения визуализации: Да, увеличение процента пермутированных данных приводит к изменению ориентации и длины векторов переменных, что существенно влияет на интерпретацию biplot. Визуализация становится менее информативной, а структура данных — более разрозненной.
+
+14.	Давайте проведем анализ чувствительности. Проведите анализ, как в шагах 4-6 для оригинального с удалением всех строк с пустыми значениями (т.е. включая колонки с количеством пропущенных значений больше 100), а затем для оригинального датафрейма с импутированием пустых значений средним или медианой. Как отличаются получившиеся результаты? В чем преимущества и недостатки каждого подхода?
+
+```{r, message=FALSE}
+library(gridExtra)
+
+cleaned_data_no_na <- BW %>% 
+  select (where (~ sum (is.na(.)) < 100)) %>% 
+  drop_na () %>% 
+  mutate (across (where (is.character), as.factor),
+    across(where(~ is.numeric(.) && all(. %in% c(0, 1))), as.factor)) %>%
+  select(where(is.numeric), -c(birth, year, exit))
+
+cleaned_data_median <- BW %>%
+  mutate(across(where(is.character), as.factor)) %>%
+  select(where(is.numeric)) %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+  select(where(~ length(unique(.)) > 2)) %>%
+  select(-c(birth, year, exit, lol))
+
+analyze_data <- function(data, title_suffix) {
+  cor_res <- rcorr(as.matrix(data), type = "spearman")
+  
+  corr_plot <- ggcorrplot(
+    cor_res$r,
+    p.mat = cor_res$P,
+    sig.level = 0.05,
+    method = "circle",
+    type = "lower",
+    lab = TRUE
+  ) + ggtitle(paste("Correlation Analysis:", title_suffix))
+  
+  pairwise_plot <- GGally::ggpairs(data) + ggtitle(paste("Pairwise Plot:", title_suffix))
+  
+  network_plot <- data %>%
+    mutate_all(as.numeric) %>%
+    cor(method = "spearman") %>%
+    corrr::network_plot(legend = c("range"), min_cor = 0) +
+    ggtitle(paste("Correlation Network:", title_suffix))
+  
+  dist_matrix <- dist(data, method = "euclidean")
+  hcrow <- hclust(dist_matrix, method = "ward.D2")
+  
+  row_dendrogram <- fviz_dend(hcrow, 
+                              k = 4,
+                              cex = 0.5,
+                              k_colors = c("#2E9FDF", "#E7B800", "#FC4E07", "lightgreen"),
+                              color_labels_by_k = TRUE,
+                              rect = TRUE) +
+    ggtitle(paste("Row Clustering:", title_suffix))
+  
+  dist_matrix_col <- dist(t(data), method = "euclidean")
+  hccol <- hclust(dist_matrix_col, method = "ward.D2")
+  
+  column_dendrogram <- fviz_dend(hccol, 
+                                 k = 3,
+                                 cex = 0.5,
+                                 k_colors = c("#2E9FDF", "#E7B800", "#FC4E07"),
+                                 color_labels_by_k = TRUE,
+                                 rect = TRUE) +
+    ggtitle(paste("Column Clustering:", title_suffix))
+  
+  heatmap_plot <- pheatmap(
+    as.matrix(data),
+    scale = "column",
+    cluster_rows = hcrow,
+    cluster_cols = hccol,
+    angle_col = 0)
+  
+  list(
+    corr_plot = corr_plot,
+    pairwise_plot = pairwise_plot,
+    network_plot = network_plot,
+    row_dendrogram = row_dendrogram,
+    column_dendrogram = column_dendrogram,
+    heatmap_plot = heatmap_plot)}
+
+results_no_na <- analyze_data(cleaned_data_no_na, "Complete Cases")
+
+results_median <- analyze_data(cleaned_data_median, "Median Imputation")
+print(results_no_na$corr_plot)
+print(results_no_na$pairwise_plot)
+print(results_no_na$network_plot)
+print(results_no_na$row_dendrogram)
+print(results_no_na$column_dendrogram)
+
+print(results_median$corr_plot)
+print(results_median$pairwise_plot)
+print(results_median$network_plot)
+print(results_median$row_dendrogram)
+print(results_median$column_dendrogram)
+
+```
+**Ответ:**
+  Удаление строк с пропущенными значениями повышает точность анализа, так как сохраняются только реальные данные, но это значительно сокращает объем выборки, что может привести к потере информации. Импутация пропущенных данных медианой, напротив, сохраняет весь объем выборки, что важно для малых данных, однако снижает точность, сглаживая вариативность и искажая связи между переменными. Выбор подхода зависит от объема данных и количества пропусков: удаление предпочтительно при небольшом количестве пропусков, а импутация — при их значительном объеме.
+
+15.	Давайте проведем анализ чувствительности. Сделайте то же, что в пункте 14, но для методов снижения размерности – PCA и UMAP. Проанализируйте результаты.
+
+```{r}
+
+cleaned_data_no_na <- BW %>%
+  select(where(~ sum(is.na(.)) < 100)) %>%
+  drop_na() %>%
+  mutate(across(where(is.character), as.factor),
+         across(where(~ is.numeric(.) && all(. %in% c(0, 1))), as.factor)) %>%
+  select(where(is.numeric), -c(birth, year, exit), dead)
+
+cleaned_data_median <- BW %>%
+  mutate(across(where(is.character), as.factor)) %>%
+  select(where(is.numeric)) %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+  select(where(~ length(unique(.)) > 2), -c(birth, year, exit), dead)
+
+perform_pca <- function(data) {
+  prcomp(scale(data %>% select(-dead)), center = TRUE, scale. = TRUE)}
+
+pca_biplot <- function(pca_model, data, title) {
+  pca_data <- as.data.frame(pca_model$x[, 1:2])
+  colnames(pca_data) <- c("PC1", "PC2")
+  pca_data$groups <- data$dead
+  
+  ggplot(pca_data, aes(x = PC1, y = PC2, color = groups)) +
+    geom_point(alpha = 0.6, size = 2) +
+    stat_ellipse(aes(group = groups), type = "norm", linetype = 2) +
+    theme_minimal() +
+    ggtitle(title)}
+
+perform_umap <- function(data) {
+  recipe(~., data = data %>% select(-dead)) %>%
+    step_normalize(all_predictors()) %>%
+    step_umap(all_predictors(), neighbors = 15, num_comp = 2, min_dist = 0.1) %>%
+    prep() %>%
+    juice()}
+
+umap_plot <- function(umap_data, data, title) {
+  colnames(umap_data) <- c("UMAP1", "UMAP2")
+  umap_data$groups <- data$dead
+  
+  ggplot(umap_data, aes(x = UMAP1, y = UMAP2, color = groups)) +
+    geom_point(alpha = 0.7, size = 2) +
+    theme_minimal() +
+    ggtitle(title)}
+
+pca_no_na <- perform_pca(cleaned_data_no_na)
+pca_median <- perform_pca(cleaned_data_median)
+
+umap_no_na <- as.data.frame(perform_umap(cleaned_data_no_na))
+umap_median <- as.data.frame(perform_umap(cleaned_data_median))
+
+pca_no_na_biplot <- pca_biplot(pca_no_na, cleaned_data_no_na, "PCA: Complete Cases")
+pca_median_biplot <- pca_biplot(pca_median, cleaned_data_median, "PCA: Median Imputation")
+
+umap_no_na_plot <- umap_plot(umap_no_na, cleaned_data_no_na, "UMAP: Complete Cases")
+umap_median_plot <- umap_plot(umap_median, cleaned_data_median, "UMAP: Median Imputation")
+
+combined_plot <- ggarrange(
+  pca_no_na_biplot, pca_median_biplot,
+  umap_no_na_plot, umap_median_plot,
+  ncol = 2,
+  nrow = 2,
+  labels = c("A", "B", "C", "D"),
+  common.legend = TRUE,
+  legend = "bottom")
+
+print(combined_plot)
+
+
+```
+
+**Ответ:** после импутации данных результаты PCA изменились не критично. UMAP выделил кластеры по умершим детям.
